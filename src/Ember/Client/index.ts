@@ -31,7 +31,7 @@ import { EventEmitter } from 'eventemitter3'
 import { S101Client } from '../Socket'
 import { getPath, assertQualifiedEmberNode, insertCommand, updateProps, isEmptyNode } from '../Lib/util'
 import { berEncode } from '../../encodings/ber'
-import { NumberedTreeNodeImpl } from '../../model/Tree'
+import { NumberedTreeNodeImpl, QualifiedElementImpl } from '../../model/Tree'
 import { EmberFunction } from '../../model/EmberFunction'
 import { DecodeResult } from '../../encodings/ber/decoder/DecodeResult'
 import { StreamEntry } from '../../model/StreamEntry'
@@ -43,6 +43,10 @@ export interface RequestPromiseArguments<T> {
 	reqId?: string
 	cancel?: () => void
 	response?: Promise<T>
+}
+
+interface RequestSendOptions {
+	dtdMinorVersion?: number
 }
 
 export enum ExpectResponse {
@@ -60,6 +64,7 @@ export interface Request {
 	reject: (err: Error) => void
 	cb?: (EmberNode: TreeElement<EmberElement>) => void
 	message: Buffer
+	sendOptions?: RequestSendOptions
 	firstSent: number
 	lastSent: number
 }
@@ -328,15 +333,28 @@ export class EmberClient extends EventEmitter<EmberClientEvents> {
 
 		const qualifiedParam = assertQualifiedEmberNode(node) as QualifiedElement<Parameter>
 
-		// TODO - validate value
-		// TODO - should other properties be scrapped
-
+		// Keep the local cache up-to-date regardless of how the outgoing payload is built.
 		qualifiedParam.contents.value = value
 
-		return this._sendRequest<TreeElement<Parameter>>(
-			qualifiedParam,
-			awaitResponse ? ExpectResponse.Any : ExpectResponse.None
-		)
+		if (this._isTemplateGovernedElement(node)) {
+			// For template-governed elements, emit a sparse value-only update to avoid
+			// overriding template-derived properties during SetValue.
+			const sparseTemplateUpdate = new QualifiedElementImpl<Parameter>(qualifiedParam.path, {
+				type: ElementType.Parameter,
+				parameterType: qualifiedParam.contents.parameterType,
+				value,
+				// Internal encoder hint used to suppress serializing context[13] type.
+				__omitParameterType: true,
+			} as Parameter)
+
+			return this._sendRequest<TreeElement<Parameter>>(
+				sparseTemplateUpdate,
+				awaitResponse ? ExpectResponse.Any : ExpectResponse.None,
+				{ dtdMinorVersion: 0x28 }
+			)
+		}
+
+		return this._sendRequest<TreeElement<Parameter>>(qualifiedParam, awaitResponse ? ExpectResponse.Any : ExpectResponse.None)
 	}
 	async matrixConnect(
 		matrix: QualifiedElement<Matrix> | NumberedTreeNode<Matrix>,
@@ -512,7 +530,11 @@ export class EmberClient extends EventEmitter<EmberClientEvents> {
 		return this._sendRequest<T>(commandEmberNode, expectResponse)
 	}
 
-	private async _sendRequest<T>(node: RootElement, expectResponse: ExpectResponse): RequestPromise<T> {
+	private async _sendRequest<T>(
+		node: RootElement,
+		expectResponse: ExpectResponse,
+		sendOptions?: RequestSendOptions
+	): RequestPromise<T> {
 		const reqId = Math.random().toString(24).substr(-4)
 		const requestPromise: RequestPromiseArguments<T> = {
 			reqId,
@@ -530,6 +552,7 @@ export class EmberClient extends EventEmitter<EmberClientEvents> {
 					resolve,
 					reject,
 					message,
+					sendOptions,
 					firstSent: Date.now(),
 					lastSent: Date.now(),
 				}
@@ -543,7 +566,7 @@ export class EmberClient extends EventEmitter<EmberClientEvents> {
 			requestPromise.response = p
 		}
 
-		const sentOk = this._client.sendBER(message) // TODO - if sending multiple values to same path, should we do synchronous requests?
+		const sentOk = this._client.sendBER(message, sendOptions) // TODO - if sending multiple values to same path, should we do synchronous requests?
 
 		if (!sentOk && requestPromise.cancel) {
 			this._requests.get(reqId)?.reject(new Error('Request was not sent correctly'))
@@ -781,7 +804,7 @@ export class EmberClient extends EventEmitter<EmberClientEvents> {
 				const sinceSent = Date.now() - req.lastSent
 				const sinceFirstSent = Date.now() - req.firstSent
 				if (this._resends && sinceSent >= this._resendTimeout) {
-					const sent = this._client.sendBER(req.message)
+					const sent = this._client.sendBER(req.message, req.sendOptions)
 					if (sent) {
 						req.lastSent = Date.now()
 					} else {
@@ -794,5 +817,25 @@ export class EmberClient extends EventEmitter<EmberClientEvents> {
 				}
 			})
 		}
+	}
+
+	private _isTemplateGovernedElement(node: TreeElement<EmberElement>): boolean {
+		const hasTemplateReference = (element: EmberElement): boolean =>
+			'templateReference' in element && (element as { templateReference?: string }).templateReference !== undefined
+
+		let current: TreeElement<EmberElement> | undefined = node
+		while (current) {
+			if (hasTemplateReference(current.contents)) {
+				return true
+			}
+
+			if (current.parent && 'contents' in current.parent) {
+				current = current.parent as TreeElement<EmberElement>
+			} else {
+				current = undefined
+			}
+		}
+
+		return false
 	}
 }
