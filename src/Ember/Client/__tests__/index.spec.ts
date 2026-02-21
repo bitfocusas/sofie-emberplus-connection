@@ -4,6 +4,7 @@ import {
 	NumberedTreeNodeImpl,
 	EmberNodeImpl,
 	ParameterImpl,
+	Parameter,
 	ParameterType,
 	ElementType,
 	QualifiedElementImpl,
@@ -384,6 +385,47 @@ describe('client', () => {
 			expect((sentElement.contents as ParameterImpl).access).toBeUndefined()
 			expect((sentElement.contents as ParameterImpl).isOnline).toBeUndefined()
 			expect((sentElement.contents as ParameterImpl).parameterType).toBe(ParameterType.String)
+			expect(sendOptions).toEqual({ dtdMinorVersion: 0x28 })
+		})
+	})
+
+	it('setValue for template-governed parameter generates a minimal BER payload', async () => {
+		await runWithConnection(async (client) => {
+			const templatedParam = new QualifiedElementImpl<Parameter>('1.2.3', {
+				type: ElementType.Parameter,
+				parameterType: ParameterType.Integer,
+				identifier: 'Volume',
+				description: 'Main Volume',
+				value: 50,
+				minimum: 0,
+				maximum: 100,
+				isOnline: true,
+				templateReference: '1.1.1',
+			})
+
+			await client.setValue(templatedParam, 75, false)
+
+			expect(onSocketWrite).toHaveBeenCalledTimes(1)
+			const sentBuffer = onSocketWrite.mock.calls[0][0] as Buffer
+			const sendOptions = onSocketWrite.mock.calls[0][1] as { dtdMinorVersion?: number } | undefined
+			const decoded = berDecode(sentBuffer)
+			const rootElements = decoded.value as Collection<RootElement>
+			const sentElement = Object.values(rootElements)[0] as RootElement
+
+			expect('path' in sentElement).toBeTruthy()
+			if (!('path' in sentElement)) throw new Error('Expected a qualified element')
+
+			const contents = sentElement.contents as ParameterImpl
+			expect(sentElement.path).toBe('1.2.3')
+			expect(contents.value).toBe(75)
+			expect(contents.identifier).toBeUndefined()
+			expect(contents.description).toBeUndefined()
+			expect(contents.access).toBeUndefined()
+			expect(contents.minimum).toBeUndefined()
+			expect(contents.maximum).toBeUndefined()
+			expect(contents.parameterType).toBe(ParameterType.Integer)
+			expect(contents.templateReference).toBeUndefined()
+			expect(contents.isOnline).toBeUndefined()
 			expect(sendOptions).toEqual({ dtdMinorVersion: 0x28 })
 		})
 	})
