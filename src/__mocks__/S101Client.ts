@@ -2,6 +2,7 @@ import { ConnectionStatus } from '../Ember/Client'
 import type OrigS101Client from '../Ember/Socket/S101Client'
 import { EventEmitter } from 'eventemitter3'
 import { S101SocketEvents } from '../Ember/Socket/S101Socket'
+import { SendBEROptions } from '../Ember/Socket/S101Socket'
 import { DecodeResult } from '../encodings/ber/decoder/DecodeResult'
 import { Root } from '../types'
 const sockets: Array<S101Client> = []
@@ -18,7 +19,7 @@ export default class S101Client
 			'on' | 'off' | 'once' | 'addListener' | 'removeListener' | 'removeAllListeners'
 		>
 {
-	public onWrite?: (data: Buffer) => boolean
+	public onWrite?: (data: Buffer, options?: SendBEROptions) => boolean
 	public onConnect?: () => void
 	public onDisconnect?: () => void
 	public onClose?: () => void
@@ -63,9 +64,9 @@ export default class S101Client
 		})
 	}
 
-	sendBER(data: Buffer): boolean {
+	sendBER(data: Buffer, options?: SendBEROptions): boolean {
 		if (this.onWrite) {
-			return this.onWrite(data) ?? true
+			return this.onWrite(data, options) ?? true
 		} else {
 			return true
 		}

@@ -30,6 +30,10 @@ const DTD_GLOW = 0x01
 const DTD_VERSION_MAJOR = 0x02
 const DTD_VERSION_MINOR = 0x1f
 
+interface EncodeBEROptions {
+	dtdMinorVersion?: number
+}
+
 const CRC_TABLE = [
 	0x0000, 0x1189, 0x2312, 0x329b, 0x4624, 0x57ad, 0x6536, 0x74bf, 0x8c48, 0x9dc1, 0xaf5a, 0xbed3, 0xca6c, 0xdbe5,
 	0xe97e, 0xf8f7, 0x1081, 0x0108, 0x3393, 0x221a, 0x56a5, 0x472c, 0x75b7, 0x643e, 0x9cc9, 0x8d40, 0xbfdb, 0xae52,
@@ -161,7 +165,8 @@ export default class S101Codec extends EventEmitter<S101CodecEvents> {
 		this.emit('emberPacket', packet.toBuffer())
 	}
 
-	encodeBER(data: Buffer): Buffer[] {
+	encodeBER(data: Buffer, options?: EncodeBEROptions): Buffer[] {
+		const dtdMinorVersion = options?.dtdMinorVersion ?? DTD_VERSION_MINOR
 		const frames = []
 		const encbuf = new SmartBuffer()
 		for (let i = 0; i < data.length; i++) {
@@ -175,18 +180,18 @@ export default class S101Codec extends EventEmitter<S101CodecEvents> {
 
 			if (encbuf.length >= 1024 && i < data.length - 1) {
 				if (frames.length === 0) {
-					frames.push(this._makeBERFrame(FLAG_FIRST_MULTI_PACKET, encbuf.toBuffer()))
+					frames.push(this._makeBERFrame(FLAG_FIRST_MULTI_PACKET, encbuf.toBuffer(), dtdMinorVersion))
 				} else {
-					frames.push(this._makeBERFrame(FLAG_MULTI_PACKET, encbuf.toBuffer()))
+					frames.push(this._makeBERFrame(FLAG_MULTI_PACKET, encbuf.toBuffer(), dtdMinorVersion))
 				}
 				encbuf.clear()
 			}
 		}
 
 		if (frames.length == 0) {
-			frames.push(this._makeBERFrame(FLAG_SINGLE_PACKET, encbuf.toBuffer()))
+			frames.push(this._makeBERFrame(FLAG_SINGLE_PACKET, encbuf.toBuffer(), dtdMinorVersion))
 		} else {
-			frames.push(this._makeBERFrame(FLAG_LAST_MULTI_PACKET, encbuf.toBuffer()))
+			frames.push(this._makeBERFrame(FLAG_LAST_MULTI_PACKET, encbuf.toBuffer(), dtdMinorVersion))
 		}
 
 		return frames
@@ -216,7 +221,7 @@ export default class S101Codec extends EventEmitter<S101CodecEvents> {
 		return this._calculateCRC(buf) == 0xf0b8
 	}
 
-	private _makeBERFrame(flags: number, data: Buffer) {
+	private _makeBERFrame(flags: number, data: Buffer, dtdMinorVersion: number) {
 		const frame = new SmartBuffer()
 		frame.writeUInt8(S101_BOF)
 		frame.writeUInt8(SLOT)
@@ -226,7 +231,7 @@ export default class S101Codec extends EventEmitter<S101CodecEvents> {
 		frame.writeUInt8(flags)
 		frame.writeUInt8(DTD_GLOW)
 		frame.writeUInt8(2) // number of app bytes
-		frame.writeUInt8(DTD_VERSION_MINOR)
+		frame.writeUInt8(dtdMinorVersion)
 		frame.writeUInt8(DTD_VERSION_MAJOR)
 		frame.writeBuffer(data)
 		return this._finalizeBuffer(frame)
