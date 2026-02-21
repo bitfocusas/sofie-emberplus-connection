@@ -337,15 +337,15 @@ export class EmberClient extends EventEmitter<EmberClientEvents> {
 		qualifiedParam.contents.value = value
 
 		if (this._isTemplateGovernedElement(node)) {
-			// For template-governed elements, emit a sparse value-only update to avoid
-			// overriding template-derived properties during SetValue.
-			const sparseTemplateUpdate = new QualifiedElementImpl<Parameter>(qualifiedParam.path, {
+			// For template-governed elements, construct a strict value-only payload.
+			// Whitelisting avoids accidental metadata leakage into BER contents.
+			const sparseTemplateContents = {
 				type: ElementType.Parameter,
-				parameterType: qualifiedParam.contents.parameterType,
 				value,
-				// Internal encoder hint used to suppress serializing context[13] type.
+				// Internal encoder hint used to suppress Context[13] type output.
 				__omitParameterType: true,
-			} as Parameter)
+			} as unknown as Parameter
+			const sparseTemplateUpdate = new QualifiedElementImpl<Parameter>(qualifiedParam.path, sparseTemplateContents)
 
 			return this._sendRequest<TreeElement<Parameter>>(
 				sparseTemplateUpdate,
