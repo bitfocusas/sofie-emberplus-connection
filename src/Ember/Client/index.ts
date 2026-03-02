@@ -29,7 +29,7 @@ import { Connection, ConnectionDisposition, ConnectionOperation } from '../../mo
 import { EmberNode } from '../../model/EmberNode'
 import { EventEmitter } from 'eventemitter3'
 import { S101Client } from '../Socket'
-import { getPath, assertQualifiedEmberNode, insertCommand, updateProps, isEmptyNode } from '../Lib/util'
+import { getPath, assertQualifiedEmberNode, insertCommand, updateProps } from '../Lib/util'
 import { berEncode } from '../../encodings/ber'
 import { NumberedTreeNodeImpl, QualifiedElementImpl } from '../../model/Tree'
 import { EmberFunction } from '../../model/EmberFunction'
