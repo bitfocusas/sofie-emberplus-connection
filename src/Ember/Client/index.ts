@@ -299,7 +299,7 @@ export class EmberClient extends EventEmitter<EmberClientEvents> {
 		// Keep the local cache up-to-date regardless of how the outgoing payload is built.
 		qualifiedParam.contents.value = value
 
-		if (this._isTemplateGovernedElement(node)) {
+		if (this._isTemplateGovernedElement(node) || this._isTemplateGovernedPath(qualifiedParam.path)) {
 			// For template-governed elements, construct a strict value-only payload.
 			// Whitelisting avoids accidental metadata leakage into BER contents.
 			const sparseTemplateContents = {
@@ -317,7 +317,10 @@ export class EmberClient extends EventEmitter<EmberClientEvents> {
 			)
 		}
 
-		return this._sendRequest<TreeElement<Parameter>>(qualifiedParam, awaitResponse ? ExpectResponse.Any : ExpectResponse.None)
+		return this._sendRequest<TreeElement<Parameter>>(
+			qualifiedParam,
+			awaitResponse ? ExpectResponse.Any : ExpectResponse.None
+		)
 	}
 	async matrixConnect(
 		matrix: QualifiedElement<Matrix> | NumberedTreeNode<Matrix>,
@@ -741,6 +744,36 @@ export class EmberClient extends EventEmitter<EmberClientEvents> {
 				current = current.parent as TreeElement<EmberElement>
 			} else {
 				current = undefined
+			}
+		}
+
+		return false
+	}
+
+	private _isTemplateGovernedPath(path: string): boolean {
+		const hasTemplateReference = (element: EmberElement): boolean =>
+			'templateReference' in element && (element as { templateReference?: string }).templateReference !== undefined
+
+		const segments = path.split('.').map((s) => Number(s))
+		if (segments.some((s) => Number.isNaN(s))) {
+			return false
+		}
+
+		let current: NumberedTreeNode<EmberElement> | undefined = this.tree[segments[0]]
+		if (!current) {
+			return false
+		}
+		if (hasTemplateReference(current.contents)) {
+			return true
+		}
+
+		for (const segment of segments.slice(1)) {
+			current = current.children?.[segment]
+			if (!current) {
+				return false
+			}
+			if (hasTemplateReference(current.contents)) {
+				return true
 			}
 		}
 
