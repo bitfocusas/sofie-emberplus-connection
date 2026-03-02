@@ -1,14 +1,15 @@
-import { EmberElement } from '../model/EmberElement'
-import { EmberFunction } from '../model/EmberFunction'
-import { Parameter, ParameterType } from '../model/Parameter'
-import { Template } from '../model/Template'
-import { Matrix } from '../model/Matrix'
-import { EmberNode } from '../model/EmberNode'
-import { StreamEntry } from '../model/StreamEntry'
-import { InvocationResult } from '../model/InvocationResult'
-import { TreeElement, NumberedTreeNode, QualifiedElement } from '../model/Tree'
+import type { EmberElement } from '../model/EmberElement'
+import type { EmberFunction } from '../model/EmberFunction'
+import { ParameterType } from '../model/Parameter'
+import type { Parameter } from '../model/Parameter'
+import type { Template } from '../model/Template'
+import type { Matrix } from '../model/Matrix'
+import type { EmberNode } from '../model/EmberNode'
+import type { StreamEntry } from '../model/StreamEntry'
+import type { InvocationResult } from '../model/InvocationResult'
+import type { TreeElement, NumberedTreeNode, QualifiedElement } from '../model/Tree'
 
-export {
+export type {
 	TreeElement,
 	NumberedTreeNode,
 	QualifiedElement,
@@ -19,11 +20,10 @@ export {
 	RootElement,
 	MinMax,
 	StringIntegerCollection,
-	RootType,
 	RelativeOID,
-	literal,
 	Collection,
 }
+export { RootType, literal }
 
 type EmberTreeNode<T extends EmberElement> = NumberedTreeNode<T>
 type RootElement =

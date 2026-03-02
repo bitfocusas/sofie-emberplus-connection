@@ -1,46 +1,58 @@
-import { EmberElement, ElementType } from './EmberElement'
-import { EmberFunction, EmberFunctionImpl } from './EmberFunction'
-import { EmberNode, EmberNodeImpl } from './EmberNode'
-import { FunctionArgument, FunctionArgumentImpl } from './FunctionArgument'
-import { Invocation } from './Invocation'
-import { InvocationResult } from './InvocationResult'
-import { Label } from './Label'
-import { Matrix, MatrixType, MatrixAddressingMode, Connections, MatrixImpl } from './Matrix'
-import { Parameter, ParameterType, ParameterAccess, ParameterImpl } from './Parameter'
-import { StreamDescription, StreamFormat } from './StreamDescription'
-import { StreamEntry } from './StreamEntry'
-import { Template, TemplateImpl } from './Template'
-import { TreeElement, NumberedTreeNode, QualifiedElement, NumberedTreeNodeImpl, QualifiedElementImpl } from './Tree'
+import { ElementType } from './EmberElement'
+import type { EmberElement } from './EmberElement'
+import { EmberFunctionImpl } from './EmberFunction'
+import type { EmberFunction } from './EmberFunction'
+import { EmberNodeImpl } from './EmberNode'
+import type { EmberNode } from './EmberNode'
+import { FunctionArgumentImpl } from './FunctionArgument'
+import type { FunctionArgument } from './FunctionArgument'
+import type { Invocation } from './Invocation'
+import type { InvocationResult } from './InvocationResult'
+import type { Label } from './Label'
+import { MatrixType, MatrixAddressingMode, MatrixImpl } from './Matrix'
+import type { Matrix, Connections } from './Matrix'
+import { ParameterType, ParameterAccess, ParameterImpl } from './Parameter'
+import type { Parameter } from './Parameter'
+import { StreamFormat } from './StreamDescription'
+import type { StreamDescription } from './StreamDescription'
+import type { StreamEntry } from './StreamEntry'
+import { TemplateImpl } from './Template'
+import type { Template } from './Template'
+import { NumberedTreeNodeImpl, QualifiedElementImpl } from './Tree'
+import type { TreeElement, NumberedTreeNode, QualifiedElement } from './Tree'
 
-export {
+export type {
 	EmberElement,
-	ElementType,
 	EmberFunction,
-	EmberFunctionImpl,
 	EmberNode,
-	EmberNodeImpl,
 	FunctionArgument,
-	FunctionArgumentImpl,
 	Invocation,
 	InvocationResult,
 	Label,
 	Matrix,
-	MatrixType,
-	MatrixAddressingMode,
 	Connections,
-	MatrixImpl,
 	Parameter,
-	ParameterType,
-	ParameterAccess,
-	ParameterImpl,
 	StreamDescription,
-	StreamFormat,
 	StreamEntry,
 	Template,
-	TemplateImpl,
 	TreeElement,
 	NumberedTreeNode,
 	QualifiedElement,
+}
+
+export {
+	ElementType,
+	EmberFunctionImpl,
+	EmberNodeImpl,
+	FunctionArgumentImpl,
+	MatrixType,
+	MatrixAddressingMode,
+	MatrixImpl,
+	ParameterType,
+	ParameterAccess,
+	ParameterImpl,
+	StreamFormat,
+	TemplateImpl,
 	NumberedTreeNodeImpl,
 	QualifiedElementImpl,
 }
