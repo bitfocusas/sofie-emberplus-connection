@@ -9,9 +9,6 @@ import { Root } from '../../types'
 import { DecodeResult } from '../../encodings/ber/decoder/DecodeResult'
 
 export type Request = any
-export interface SendBEROptions {
-	dtdMinorVersion?: number
-}
 
 export type S101SocketEvents = {
 	error: [Error]
@@ -133,10 +130,10 @@ export default class S101Socket extends EventEmitter<S101SocketEvents> {
 		return this.socket !== undefined && !!this.socket
 	}
 
-	sendBER(data: Buffer, options?: SendBEROptions): boolean {
+	sendBER(data: Buffer): boolean {
 		if (this.isConnected() && this.socket) {
 			try {
-				const frames = this.codec.encodeBER(data, options)
+				const frames = this.codec.encodeBER(data)
 				for (let i = 0; i < frames.length; i++) {
 					this.socket.write(frames[i])
 				}

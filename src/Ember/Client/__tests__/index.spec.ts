@@ -4,16 +4,13 @@ import {
 	NumberedTreeNodeImpl,
 	EmberNodeImpl,
 	ParameterImpl,
-	Parameter,
 	ParameterType,
-	ElementType,
 	QualifiedElementImpl,
 } from '../../../model'
 import { Collection, Root, RootElement } from '../../../types/types'
 import { EmberClient } from '../'
 import S101ClientMock from '../../../__mocks__/S101Client'
 import { DecodeResult } from '../../../encodings/ber/decoder/DecodeResult'
-import { berDecode } from '../../../encodings/ber'
 // import { EmberTreeNode, RootElement } from '../../../types/types'
 // import { ElementType, EmberElement } from '../../../model/EmberElement'
 // import { Parameter, ParameterType } from '../../../model/Parameter'
@@ -87,7 +84,7 @@ describe('client', () => {
 	function createQualifiedNodeResponse(
 		path: string,
 		content: EmberElement,
-		children: Collection<NumberedTreeNode<EmberElement>> | undefined
+		children: Collection<NumberedTreeNode<EmberElement>>
 	): DecodeResult<Root> {
 		const parent = new QualifiedElementImpl<EmberElement>(path, content, children)
 
@@ -98,10 +95,8 @@ describe('client', () => {
 				fixLevel(child, node)
 			}
 		}
-		if (children) {
-			for (const child of Object.values<NumberedTreeNode<EmberElement>>(children)) {
-				fixLevel(child, parent as any as NumberedTreeNode<EmberElement>)
-			}
+		for (const child of Object.values<NumberedTreeNode<EmberElement>>(children)) {
+			fixLevel(child, parent as any as NumberedTreeNode<EmberElement>)
 		}
 		return {
 			value: {
@@ -249,97 +244,6 @@ describe('client', () => {
 
 			const res2 = await getByPathPromise2
 			expect(res2).toBeTruthy()
-		})
-	})
-
-	it('setValue sends sparse update for template-governed parameters', async () => {
-		await runWithConnection(async (client) => {
-			const templatedParam = new NumberedTreeNodeImpl(1, {
-				type: ElementType.Parameter,
-				parameterType: ParameterType.String,
-				identifier: 'SDP',
-				value: 'old value',
-				templateReference: '1.6.4',
-			})
-
-			await client.setValue(templatedParam, 'new value', false)
-
-			expect(onSocketWrite).toHaveBeenCalledTimes(1)
-			const sentBuffer = onSocketWrite.mock.calls[0][0] as Buffer
-			const sendOptions = onSocketWrite.mock.calls[0][1] as { dtdMinorVersion?: number } | undefined
-			const decoded = berDecode(sentBuffer)
-			const rootElements = decoded.value as Collection<RootElement>
-			const sentElement = Object.values<RootElement>(rootElements)[0]
-
-			expect('path' in sentElement).toBeTruthy()
-			if (!('path' in sentElement)) throw new Error('Expected a qualified element')
-
-			expect(sentElement.path).toBe('1')
-			expect(sentElement.contents.type).toBe('PARAMETER')
-			expect((sentElement.contents as ParameterImpl).value).toBe('new value')
-			expect((sentElement.contents as ParameterImpl).identifier).toBeUndefined()
-			expect((sentElement.contents as ParameterImpl).access).toBeUndefined()
-			expect((sentElement.contents as ParameterImpl).isOnline).toBeUndefined()
-			expect((sentElement.contents as ParameterImpl).parameterType).toBe(ParameterType.String)
-			expect(sendOptions).toEqual({ dtdMinorVersion: 0x28 })
-		})
-	})
-
-	it('setValue for template-governed parameter generates a minimal BER payload', async () => {
-		await runWithConnection(async (client) => {
-			const templatedParam = new QualifiedElementImpl<Parameter>('1.2.3', {
-				type: ElementType.Parameter,
-				parameterType: ParameterType.Integer,
-				identifier: 'Volume',
-				description: 'Main Volume',
-				value: 50,
-				minimum: 0,
-				maximum: 100,
-				isOnline: true,
-				templateReference: '1.1.1',
-			})
-
-			await client.setValue(templatedParam, 75, false)
-
-			expect(onSocketWrite).toHaveBeenCalledTimes(1)
-			const sentBuffer = onSocketWrite.mock.calls[0][0] as Buffer
-			const sendOptions = onSocketWrite.mock.calls[0][1] as { dtdMinorVersion?: number } | undefined
-			const decoded = berDecode(sentBuffer)
-			const rootElements = decoded.value as Collection<RootElement>
-			const sentElement = Object.values<RootElement>(rootElements)[0]
-
-			expect('path' in sentElement).toBeTruthy()
-			if (!('path' in sentElement)) throw new Error('Expected a qualified element')
-
-			const contents = sentElement.contents as ParameterImpl
-			expect(sentElement.path).toBe('1.2.3')
-			expect(contents.value).toBe(75)
-			expect(contents.identifier).toBeUndefined()
-			expect(contents.description).toBeUndefined()
-			expect(contents.access).toBeUndefined()
-			expect(contents.minimum).toBeUndefined()
-			expect(contents.maximum).toBeUndefined()
-			expect(contents.parameterType).toBe(ParameterType.Integer)
-			expect(contents.templateReference).toBeUndefined()
-			expect(contents.isOnline).toBeUndefined()
-			expect(sendOptions).toEqual({ dtdMinorVersion: 0x28 })
-		})
-	})
-
-	it('setValue keeps default glow version for non-template parameters', async () => {
-		await runWithConnection(async (client) => {
-			const regularParam = new NumberedTreeNodeImpl(1, {
-				type: ElementType.Parameter,
-				parameterType: ParameterType.String,
-				identifier: 'PlainParam',
-				value: 'old value',
-			})
-
-			await client.setValue(regularParam, 'new value', false)
-
-			expect(onSocketWrite).toHaveBeenCalledTimes(1)
-			const sendOptions = onSocketWrite.mock.calls[0][1] as { dtdMinorVersion?: number } | undefined
-			expect(sendOptions).toBeUndefined()
 		})
 	})
 })

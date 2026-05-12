@@ -10,7 +10,7 @@ import {
 	RelativeOID,
 } from './types'
 
-export type {
+export {
 	EmberTreeNode,
 	EmberValue,
 	EmberTypedValue,
@@ -18,6 +18,6 @@ export type {
 	RootElement,
 	MinMax,
 	StringIntegerCollection,
+	RootType,
 	RelativeOID,
 }
-export { RootType }

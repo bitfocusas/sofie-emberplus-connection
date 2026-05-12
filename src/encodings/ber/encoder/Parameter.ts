@@ -75,8 +75,7 @@ export function encodeParameter(parameter: Parameter, writer: Ber.Writer): void 
 		writer.endSequence()
 	}
 
-	const omitParameterType = (parameter as { __omitParameterType?: boolean }).__omitParameterType === true
-	if (parameter.parameterType && !omitParameterType) {
+	if (parameter.parameterType) {
 		writer.startSequence(Ber.CONTEXT(13))
 		writer.writeInt(parameterTypeToInt(parameter.parameterType))
 		writer.endSequence()
@@ -98,11 +97,7 @@ export function encodeParameter(parameter: Parameter, writer: Ber.Writer): void 
 
 	writer.writeIfDefined(parameter.schemaIdentifiers, writer.writeString, 17, Ber.BERDataTypes.STRING)
 
-	if (parameter.templateReference != null) {
-		writer.startSequence(Ber.CONTEXT(18))
-		writer.writeRelativeOID(parameter.templateReference, Ber.BERDataTypes.RELATIVE_OID)
-		writer.endSequence()
-	}
+	writer.writeIfDefined(parameter.templateReference, writer.writeString, 18, Ber.BERDataTypes.STRING)
 
 	writer.endSequence()
 }

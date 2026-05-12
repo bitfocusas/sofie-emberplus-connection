@@ -1,5 +1,5 @@
 import { EmberElement } from './EmberElement'
-import type { RelativeOID, RootElement, Collection } from '../types/types'
+import { RelativeOID, RootElement, Collection } from '../types/types'
 
 export { TreeElement, NumberedTreeNode, QualifiedElement, NumberedTreeNodeImpl, QualifiedElementImpl }
 
