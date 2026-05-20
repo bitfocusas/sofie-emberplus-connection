@@ -180,9 +180,18 @@ describe('client', () => {
 		})
 	})
 
-	it('setValue sends a minimal value-only QualifiedParameter', async () => {
+	/**
+	 * Bootstraps a tree containing a single Parameter at path "1.1" whose
+	 * descriptor fields (identifier, description, access, isOnline, …) are
+	 * all populated, then runs `body` with the resolved NumberedTreeNode and
+	 * the most recently sent BER buffer's decoded root.
+	 */
+	async function runSetValueScenario(
+		paramType: ParameterType,
+		setValueArg: unknown,
+		body: (decodedRoot: { contents?: Record<string, unknown>; path?: string }) => void
+	) {
 		await runWithConnection(async (client, socket) => {
-			// Bootstrap the tree so getElementByPath can resolve a Parameter at "1.1".
 			const getRootDirReq = await client.getDirectory(client.tree)
 			getRootDirReq.response?.catch(() => null)
 			onSocketWrite.mockClear()
@@ -193,20 +202,20 @@ describe('client', () => {
 			})
 			await getRootDirReq.response
 
-			const getByPath = client.getElementByPath('Root.SDP')
+			const getByPath = client.getElementByPath('Root.Param')
 			socket.mockData(
 				createQualifiedNodeResponse('1', new EmberNodeImpl('Root', undefined, undefined, true), {
 					1: new NumberedTreeNodeImpl(
 						1,
 						new ParameterImpl(
-							ParameterType.String,
-							'SDP',
-							'Session description',
-							'initial',
+							paramType,
+							'Param',
+							'A parameter whose descriptor should not leak',
+							undefined,
 							undefined,
 							undefined,
 							ParameterAccess.ReadWrite,
-							undefined,
+							'%lld',
 							undefined,
 							undefined,
 							true
@@ -220,7 +229,115 @@ describe('client', () => {
 			expect(param).toBeTruthy()
 
 			onSocketWrite.mockClear()
-			await client.setValue(param, 'v=0\r\no=- 0 0 IN IP4 0.0.0.0\r\n', false)
+			await client.setValue(param, setValueArg as never, false)
+
+			expect(onSocketWrite).toHaveBeenCalledTimes(1)
+			const sentBuffer: Buffer = onSocketWrite.mock.calls[0][0]
+			const decoded = berDecode(sentBuffer)
+			const root = Object.values<{ contents?: Record<string, unknown>; path?: string }>(
+				decoded.value as Record<number, { contents?: Record<string, unknown>; path?: string }>
+			)[0] as { contents?: Record<string, unknown>; path?: string }
+			body(root)
+		})
+	}
+
+	/**
+	 * Asserts that the decoded outgoing setValue payload contains no
+	 * descriptor leakage. `parameterType` is ignored because the decoder
+	 * always synthesises it from the BER value tag — its presence is fine
+	 * and indeed expected; we care that everything else is absent.
+	 */
+	function expectMinimalContents(root: { contents?: Record<string, unknown>; path?: string }) {
+		const definedKeys = Object.entries<unknown>(root.contents ?? {})
+			.filter(([k, v]) => v !== undefined && k !== 'parameterType')
+			.map(([k]) => k)
+			.sort()
+		expect(definedKeys).toEqual(['type', 'value'])
+		expect((root.contents as unknown as Parameter).type).toBe(ElementType.Parameter)
+		expect(root.path).toBe('1.1')
+	}
+
+	it('setValue sends a minimal value-only QualifiedParameter (string)', async () => {
+		await runSetValueScenario(ParameterType.String, 'v=0\r\no=- 0 0 IN IP4 0.0.0.0\r\n', (root) => {
+			expectMinimalContents(root)
+			expect((root.contents as unknown as Parameter).parameterType).toBe(ParameterType.String)
+			expect((root.contents as unknown as Parameter).value).toBe('v=0\r\no=- 0 0 IN IP4 0.0.0.0\r\n')
+		})
+	})
+
+	it('setValue sends a minimal value-only QualifiedParameter (integer)', async () => {
+		await runSetValueScenario(ParameterType.Integer, 42, (root) => {
+			expectMinimalContents(root)
+			expect((root.contents as unknown as Parameter).parameterType).toBe(ParameterType.Integer)
+			expect((root.contents as unknown as Parameter).value).toBe(42)
+		})
+	})
+
+	it('setValue sends a minimal value-only QualifiedParameter (real)', async () => {
+		await runSetValueScenario(ParameterType.Real, 3.14159, (root) => {
+			expectMinimalContents(root)
+			expect((root.contents as unknown as Parameter).parameterType).toBe(ParameterType.Real)
+			expect((root.contents as unknown as Parameter).value).toBeCloseTo(3.14159, 5)
+		})
+	})
+
+	it('setValue sends a minimal value-only QualifiedParameter (boolean)', async () => {
+		await runSetValueScenario(ParameterType.Boolean, true, (root) => {
+			expectMinimalContents(root)
+			expect((root.contents as unknown as Parameter).parameterType).toBe(ParameterType.Boolean)
+			expect((root.contents as unknown as Parameter).value).toBe(true)
+		})
+	})
+
+	it('setValue sends a minimal value-only QualifiedParameter (enum)', async () => {
+		// On the wire, Enum and Integer share the BER INTEGER tag, so the
+		// decoder reports Integer here. That's fine — the provider knows
+		// from its own descriptor that the parameter is an enum.
+		await runSetValueScenario(ParameterType.Enum, 2, (root) => {
+			expectMinimalContents(root)
+			expect((root.contents as unknown as Parameter).parameterType).toBe(ParameterType.Integer)
+			expect((root.contents as unknown as Parameter).value).toBe(2)
+		})
+	})
+
+	it('setValue sends a minimal value-only QualifiedParameter (octets)', async () => {
+		const payload = Buffer.from([0xde, 0xad, 0xbe, 0xef])
+		await runSetValueScenario(ParameterType.Octets, payload, (root) => {
+			expectMinimalContents(root)
+			expect((root.contents as unknown as Parameter).parameterType).toBe(ParameterType.Octets)
+			expect((root.contents as unknown as Parameter).value).toEqual(payload)
+		})
+	})
+
+	it('setValue sends a minimal value-only QualifiedParameter (null)', async () => {
+		await runSetValueScenario(ParameterType.Null, null, (root) => {
+			expectMinimalContents(root)
+			expect((root.contents as unknown as Parameter).parameterType).toBe(ParameterType.Null)
+			expect((root.contents as unknown as Parameter).value).toBeNull()
+		})
+	})
+
+	it('setValue accepts an already-qualified element and still sends a minimal payload', async () => {
+		await runWithConnection(async (client) => {
+			const qualified = new QualifiedElementImpl<Parameter>(
+				'1.2.3',
+				new ParameterImpl(
+					ParameterType.Integer,
+					'Gain',
+					'Channel gain',
+					0,
+					100,
+					-100,
+					ParameterAccess.ReadWrite,
+					undefined,
+					undefined,
+					undefined,
+					true
+				)
+			)
+
+			onSocketWrite.mockClear()
+			await client.setValue(qualified as never, 7, false)
 
 			expect(onSocketWrite).toHaveBeenCalledTimes(1)
 			const sentBuffer: Buffer = onSocketWrite.mock.calls[0][0]
@@ -229,21 +346,20 @@ describe('client', () => {
 				decoded.value as Record<number, { contents?: Record<string, unknown>; path?: string }>
 			)[0] as { contents?: Record<string, unknown>; path?: string }
 
-			// Only the parameter's value should have been emitted on the wire.
-			// The decoder synthesises `parameterType` from the BER value tag
-			// when no Context[13] is present, so we ignore it here; the test
-			// guards against identifier (Context[0]), access (Context[5]),
-			// isOnline (Context[9]), and similar metadata fields being
-			// emitted, all of which would otherwise round-trip as defined
-			// values.
 			const definedKeys = Object.entries<unknown>(root.contents ?? {})
 				.filter(([k, v]) => v !== undefined && k !== 'parameterType')
 				.map(([k]) => k)
 				.sort()
 			expect(definedKeys).toEqual(['type', 'value'])
-			expect((root.contents as unknown as Parameter).type).toBe(ElementType.Parameter)
-			expect((root.contents as unknown as Parameter).value).toBe('v=0\r\no=- 0 0 IN IP4 0.0.0.0\r\n')
-			expect(root.path).toBe('1.1')
+			expect(root.path).toBe('1.2.3')
+			expect((root.contents as unknown as Parameter).value).toBe(7)
+
+			// Local cache reflects the new value.
+			expect(qualified.contents.value).toBe(7)
+			// And, crucially, descriptor fields on the cached element are untouched.
+			expect(qualified.contents.identifier).toBe('Gain')
+			expect(qualified.contents.access).toBe(ParameterAccess.ReadWrite)
+			expect(qualified.contents.isOnline).toBe(true)
 		})
 	})
 
