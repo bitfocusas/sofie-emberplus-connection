@@ -31,7 +31,7 @@ import { EventEmitter } from 'eventemitter3'
 import { S101Client } from '../Socket'
 import { getPath, assertQualifiedEmberNode, insertCommand, updateProps } from '../Lib/util'
 import { berEncode } from '../..'
-import { NumberedTreeNodeImpl } from '../../model/Tree'
+import { NumberedTreeNodeImpl, QualifiedElementImpl } from '../../model/Tree'
 import { EmberFunction } from '../../model/EmberFunction'
 import { DecodeResult } from '../../encodings/ber/decoder/DecodeResult'
 
@@ -291,12 +291,27 @@ export class EmberClient extends EventEmitter<EmberClientEvents> {
 
 		const qualifiedParam = assertQualifiedEmberNode(node) as QualifiedElement<Parameter>
 
-		// TODO - validate value
-		// TODO - should other properties be scrapped?
+		// Keep the local cache up-to-date.
 		qualifiedParam.contents.value = value
 
+		// Per the Ember+ specification, a value-change request must consist of a
+		// QualifiedParameter carrying only the new value. Sending any other
+		// descriptor fields (identifier, access, isOnline, parameterType, …)
+		// causes strict providers to reject the message as a descriptor
+		// mutation rather than a value update. parameterType is kept on the
+		// outgoing contents so the BER encoder selects the correct value
+		// encoding via writeValue; __omitParameterType suppresses the
+		// corresponding Context[13] output.
+		const valueOnlyContents = {
+			type: ElementType.Parameter,
+			parameterType: qualifiedParam.contents.parameterType,
+			value,
+			__omitParameterType: true,
+		} as unknown as Parameter
+		const valueOnlyUpdate = new QualifiedElementImpl<Parameter>(qualifiedParam.path, valueOnlyContents)
+
 		return this._sendRequest<TreeElement<Parameter>>(
-			qualifiedParam,
+			valueOnlyUpdate,
 			awaitResponse ? ExpectResponse.Any : ExpectResponse.None
 		)
 	}

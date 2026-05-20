@@ -7,10 +7,13 @@ import {
 	ParameterType,
 	QualifiedElementImpl,
 } from '../../../model'
+import { ElementType } from '../../../model/EmberElement'
 import { Collection, Root, RootElement } from '../../../types/types'
 import { EmberClient } from '../'
 import S101ClientMock from '../../../__mocks__/S101Client'
 import { DecodeResult } from '../../../encodings/ber/decoder/DecodeResult'
+import { berDecode } from '../../../encodings/ber'
+import { Parameter, ParameterAccess } from '../../../model/Parameter'
 // import { EmberTreeNode, RootElement } from '../../../types/types'
 // import { ElementType, EmberElement } from '../../../model/EmberElement'
 // import { Parameter, ParameterType } from '../../../model/Parameter'
@@ -174,6 +177,73 @@ describe('client', () => {
 			expect(res).toMatchObject(
 				new NumberedTreeNodeImpl(1, new ParameterImpl(ParameterType.Boolean, 'On', undefined, false))
 			)
+		})
+	})
+
+	it('setValue sends a minimal value-only QualifiedParameter', async () => {
+		await runWithConnection(async (client, socket) => {
+			// Bootstrap the tree so getElementByPath can resolve a Parameter at "1.1".
+			const getRootDirReq = await client.getDirectory(client.tree)
+			getRootDirReq.response?.catch(() => null)
+			onSocketWrite.mockClear()
+			socket.mockData({
+				value: {
+					1: new NumberedTreeNodeImpl(1, new EmberNodeImpl('Root', undefined, undefined, true)),
+				},
+			})
+			await getRootDirReq.response
+
+			const getByPath = client.getElementByPath('Root.SDP')
+			socket.mockData(
+				createQualifiedNodeResponse('1', new EmberNodeImpl('Root', undefined, undefined, true), {
+					1: new NumberedTreeNodeImpl(
+						1,
+						new ParameterImpl(
+							ParameterType.String,
+							'SDP',
+							'Session description',
+							'initial',
+							undefined,
+							undefined,
+							ParameterAccess.ReadWrite,
+							undefined,
+							undefined,
+							undefined,
+							true
+						)
+					),
+				})
+			)
+			await new Promise(setImmediate)
+
+			const param = (await getByPath) as NumberedTreeNode<Parameter>
+			expect(param).toBeTruthy()
+
+			onSocketWrite.mockClear()
+			await client.setValue(param, 'v=0\r\no=- 0 0 IN IP4 0.0.0.0\r\n', false)
+
+			expect(onSocketWrite).toHaveBeenCalledTimes(1)
+			const sentBuffer: Buffer = onSocketWrite.mock.calls[0][0]
+			const decoded = berDecode(sentBuffer)
+			const root = Object.values<{ contents?: Record<string, unknown>; path?: string }>(
+				decoded.value as Record<number, { contents?: Record<string, unknown>; path?: string }>
+			)[0] as { contents?: Record<string, unknown>; path?: string }
+
+			// Only the parameter's value should have been emitted on the wire.
+			// The decoder synthesises `parameterType` from the BER value tag
+			// when no Context[13] is present, so we ignore it here; the test
+			// guards against identifier (Context[0]), access (Context[5]),
+			// isOnline (Context[9]), and similar metadata fields being
+			// emitted, all of which would otherwise round-trip as defined
+			// values.
+			const definedKeys = Object.entries<unknown>(root.contents ?? {})
+				.filter(([k, v]) => v !== undefined && k !== 'parameterType')
+				.map(([k]) => k)
+				.sort()
+			expect(definedKeys).toEqual(['type', 'value'])
+			expect((root.contents as unknown as Parameter).type).toBe(ElementType.Parameter)
+			expect((root.contents as unknown as Parameter).value).toBe('v=0\r\no=- 0 0 IN IP4 0.0.0.0\r\n')
+			expect(root.path).toBe('1.1')
 		})
 	})
 

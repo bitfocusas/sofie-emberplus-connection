@@ -75,7 +75,8 @@ export function encodeParameter(parameter: Parameter, writer: Ber.Writer): void 
 		writer.endSequence()
 	}
 
-	if (parameter.parameterType) {
+	const omitParameterType = (parameter as { __omitParameterType?: boolean }).__omitParameterType === true
+	if (parameter.parameterType && !omitParameterType) {
 		writer.startSequence(Ber.CONTEXT(13))
 		writer.writeInt(parameterTypeToInt(parameter.parameterType))
 		writer.endSequence()
